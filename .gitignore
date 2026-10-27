@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+tts_env/
+
+# Sensitive files / API keys & cookies
+*.txt
+*.log
+.env
+gemini_key.txt
+cookies.txt
+cookies_netscape.txt
+
+# Media / Big Cache
+cache/
+temp/
+output/
+diag_*.mp3
+*.mp4
+*.mp3
+bin/
