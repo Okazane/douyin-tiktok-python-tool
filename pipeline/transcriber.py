@@ -1,11 +1,15 @@
-"""Speech-to-text using faster-whisper."""
+"""Speech-to-text using Faster-Whisper and SenseVoice-Small AI."""
 import json
 import math
+import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
 from faster_whisper import WhisperModel
-from config import WHISPER_MODEL, WHISPER_LANGUAGE, MIN_WORDS_THRESHOLD, CACHE_DIR
+from config import WHISPER_MODEL, MIN_WORDS_THRESHOLD, CACHE_DIR
+from pipeline.model_cache import MODEL_CACHE
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Segment:
@@ -26,16 +30,17 @@ class TranscriptResult:
     word_count: int
     reason: str = ""
 
-from pipeline.model_cache import MODEL_CACHE
-
 def get_transcript_cache_path(video_path: Path, model_size: str) -> Path:
     """Lấy đường dẫn file cache transcript cho video cụ thể."""
     cache_dir = Path(video_path).parent if Path(video_path).parent.name != "temp" else CACHE_DIR
     return cache_dir / f"transcript_{Path(video_path).stem}_{model_size}.json"
 
-def transcribe(video_path: Path, model_size: str = "medium") -> TranscriptResult:
-    """Transcribe audio from video file using RAM-cached Whisper model (kèm Transcript Cache)."""
-    cache_path = get_transcript_cache_path(video_path, model_size)
+def transcribe(video_path: Path, model_size: str = "medium", engine: str = "whisper") -> TranscriptResult:
+    """
+    Transcribe audio from video file using RAM-cached model (Faster-Whisper hoặc SenseVoice-Small).
+    Kèm Transcript Cache và cơ chế Fallback an toàn.
+    """
+    cache_path = get_transcript_cache_path(video_path, f"{engine}_{model_size}")
     if cache_path.exists():
         try:
             res = load_transcript(cache_path)
@@ -44,6 +49,38 @@ def transcribe(video_path: Path, model_size: str = "medium") -> TranscriptResult
         except Exception:
             pass
 
+    # Nếu chọn engine sensevoice -> thử SenseVoice-Small trước, fallback Whisper
+    if engine == "sensevoice":
+        try:
+            logger.info("[Transcriber] Kích hoạt SenseVoice-Small AI ASR...")
+            sv_model = MODEL_CACHE.get_sensevoice()
+            res = sv_model.generate(input=str(video_path), language="zh", use_itn=True)
+            if res and len(res) > 0 and res[0].get("text"):
+                raw_text = res[0]["text"]
+                # Dọn dẹp thẻ cảm xúc và ngôn ngữ như <|zh|><|NEUTRAL|>
+                import re
+                clean_text = re.sub(r"<\|[^|>]+(?:\|>)?", "", raw_text).strip()
+                if len(clean_text) >= MIN_WORDS_THRESHOLD:
+                    from utils.ffmpeg import get_video_info
+                    vinfo = get_video_info(video_path)
+                    dur = vinfo.duration or 10.0
+                    seg = Segment(id=0, start=0.0, end=dur, text=clean_text, confidence=0.95)
+                    result = TranscriptResult(
+                        success=True,
+                        segments=[seg],
+                        language="zh",
+                        total_duration=dur,
+                        word_count=len(clean_text)
+                    )
+                    try:
+                        save_transcript(result, cache_path)
+                    except Exception:
+                        pass
+                    return result
+        except Exception as e:
+            logger.warning(f"[Transcriber] SenseVoice lỗi ({e}). Tự động fallback về Faster-Whisper...")
+
+    # Chế độ Whisper chuẩn (int8, 8 CPU threads, beam_size=3)
     model = MODEL_CACHE.get_whisper(model_size)
     
     initial_prompt = "以下是关于美食制作、农村生活、家常菜烹饪、食材采摘的视频内容，用词准确，包含常见食材、水果、调料和方言词汇。"

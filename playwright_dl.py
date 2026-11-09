@@ -54,9 +54,10 @@ def download_douyin_playwright(video_url: str, output_path: Path) -> bool:
         video_urls = []
         def handle_response(response):
             url = response.url
-            if any(cdn in url for cdn in ['douyinvod.com', 'douyincdn.com', 'bytevcloudcdn.com', 'bytecdn.cn']):
-                if '.mp4' in url or 'video' in url.lower() or 'aweme' in url.lower():
-                    video_urls.append(url)
+            if response.status in (200, 206):
+                if any(cdn in url for cdn in ['douyinvod.com', 'bytevcloudcdn.com', 'bytecdn.cn']):
+                    if 'uuu_265' not in url and 'douyinstatic' not in url:
+                        video_urls.append(url)
         
         page.on('response', handle_response)
         
@@ -84,9 +85,15 @@ def download_douyin_playwright(video_url: str, output_path: Path) -> bool:
             except:
                 pass
             
+            # Also send space key to start video stream
+            try:
+                page.keyboard.press('Space')
+            except:
+                pass
+            
             # Wait for video to start streaming
             print("Waiting for video stream...")
-            for i in range(15):
+            for i in range(12):
                 time.sleep(1)
                 if video_urls:
                     print(f"  Found {len(video_urls)} CDN URLs after {i+1}s")
@@ -133,12 +140,16 @@ def download_douyin_playwright(video_url: str, output_path: Path) -> bool:
                     print(f"  DOM failed: {e}")
             
             if video_urls:
-                # Pick the best URL (prefer mp4, longest URL usually = highest quality)
-                best_url = sorted(video_urls, key=len, reverse=True)[0]
-                # Clean up URL encoding
-                best_url = best_url.replace('\\u002F', '/').replace('\\u0026', '&')
-                print(f"\nDownloading from CDN: {best_url[:120]}...")
+                # Deduplicate and clean URLs
+                unique_urls = []
+                seen = set()
+                for u in video_urls:
+                    u_clean = u.replace('\\u002F', '/').replace('\\u0026', '&')
+                    if u_clean not in seen:
+                        seen.add(u_clean)
+                        unique_urls.append(u_clean)
                 
+                print(f"Checking sizes of {len(unique_urls)} candidates...")
                 import requests
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0.0.0',
@@ -146,6 +157,34 @@ def download_douyin_playwright(video_url: str, output_path: Path) -> bool:
                     'Accept': '*/*',
                     'Accept-Encoding': 'identity',
                 }
+                
+                # Check Content-Length for each candidate to pick the FULL video, not a preview
+                candidates_with_size = []
+                for u in unique_urls[:8]:
+                    try:
+                        h = requests.head(u, headers=headers, timeout=5, allow_redirects=True)
+                        cl = int(h.headers.get('content-length', 0))
+                        if cl == 0 and 'content-range' in h.headers:
+                            cr = h.headers.get('content-range', '')
+                            if '/' in cr:
+                                cl = int(cr.split('/')[-1])
+                        if cl == 0:
+                            h2 = requests.get(u, headers={**headers, 'Range': 'bytes=0-1'}, timeout=5)
+                            cr = h2.headers.get('content-range', '')
+                            if '/' in cr:
+                                cl = int(cr.split('/')[-1])
+                        candidates_with_size.append((u, cl))
+                        print(f"  Candidate: {cl / 1024 / 1024:.2f} MB -> {u[:90]}...")
+                    except Exception as e:
+                        candidates_with_size.append((u, 0))
+                
+                # Sort by file size descending
+                candidates_with_size.sort(key=lambda x: x[1], reverse=True)
+                best_url, best_size = candidates_with_size[0]
+                
+                print(f"\nBest video selected: {best_size / 1024 / 1024:.2f} MB")
+                print(f"Downloading from CDN: {best_url[:120]}...")
+                
                 resp = requests.get(best_url, headers=headers, stream=True, timeout=120)
                 if resp.status_code == 200:
                     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,19 +195,17 @@ def download_douyin_playwright(video_url: str, output_path: Path) -> bool:
                             total += len(chunk)
                     size_mb = total / 1024 / 1024
                     print(f"Downloaded {size_mb:.1f} MB -> {output_path}")
-                    return size_mb > 0.1
+                    return size_mb > 0.5
                 else:
                     print(f"Download failed: HTTP {resp.status_code}")
-                    # Try next URL
-                    for alt_url in video_urls[1:3]:
-                        alt_url = alt_url.replace('\\u002F', '/').replace('\\u0026', '&')
+                    for alt_url, _ in candidates_with_size[1:3]:
                         print(f"Trying alt: {alt_url[:100]}...")
                         resp2 = requests.get(alt_url, headers=headers, stream=True, timeout=60)
                         if resp2.status_code == 200:
                             with open(output_path, 'wb') as f:
                                 for chunk in resp2.iter_content(chunk_size=65536):
                                     f.write(chunk)
-                            return output_path.stat().st_size > 100000
+                            return output_path.stat().st_size > 500000
             else:
                 print("ERROR: No video URLs found")
                 page.screenshot(path=str(OUTPUT_DIR / "debug_v2.png"))

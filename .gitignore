@@ -10,6 +10,7 @@ tts_env/
 
 # Sensitive files / API keys & cookies
 *.txt
+!requirements.txt
 *.log
 .env
 gemini_key.txt

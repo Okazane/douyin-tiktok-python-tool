@@ -242,7 +242,6 @@ def download_video(input_source: str) -> Path:
             if '\t' in content or content.startswith('# Netscape'):
                 ydl_opts['cookiefile'] = str(COOKIE_FILE)
             else:
-                from utils.cookie_helper import get_cookie_header_string
                 cookie_str = get_cookie_header_string()
                 if cookie_str:
                     ydl_opts['http_headers']['Cookie'] = cookie_str

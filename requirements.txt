@@ -1,0 +1,18 @@
+# Core
+faster-whisper>=1.0.0
+deep-translator>=1.11.0
+edge-tts>=6.1.0
+pysubs2>=1.7.0
+
+# Utils  
+yt-dlp>=2024.0
+rich>=13.0
+click>=8.0
+playwright>=1.40.0
+opencv-python>=4.8.0
+easyocr>=1.7.0
+
+# Optional Advanced AI Engines
+vieneu>=3.8.0
+funasr>=1.4.0
+audio-separator>=0.48.0

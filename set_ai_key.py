@@ -11,14 +11,15 @@ if sys.platform == "win32":
         pass
 
 from config import AI_KEY_FILE
-from pipeline.translator import get_active_gemini_key, translate_single
+from pipeline.translator import get_gemini_keys, translate_single
 
 def main():
     print("=" * 65)
     print("   🤖 CÀI ĐẶT GOOGLE GEMINI AI KEY (DỊCH THUẬT SIÊU MƯỢT)")
     print("=" * 65)
     
-    current_key = get_active_gemini_key()
+    keys = get_gemini_keys()
+    current_key = keys[0] if keys else None
     if current_key:
         masked = current_key[:6] + "..." + current_key[-4:]
         print(f"\n[INFO] Đã tìm thấy Gemini API Key đang hoạt động: {masked}")

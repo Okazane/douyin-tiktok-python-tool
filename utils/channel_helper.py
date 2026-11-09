@@ -3,12 +3,12 @@ import re
 import json
 import logging
 from pathlib import Path
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, CACHE_DIR
 
 logger = logging.getLogger(__name__)
 
 # ─── Profile cache file ───────────────────────────────────────────────────────
-CHANNEL_PROFILE_PATH = Path("D:/Antigravity/TIKTOK/cache/channel_profiles.json")
+CHANNEL_PROFILE_PATH = CACHE_DIR / "channel_profiles.json"
 
 # ─── Bảng tên kênh Tiếng Việt ─────────────────────────────────────────────────
 KNOWN_CHANNELS_VN = {

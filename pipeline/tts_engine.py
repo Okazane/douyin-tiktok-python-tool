@@ -7,41 +7,31 @@ import edge_tts
 
 from config import (
     TTS_ENGINE, TTS_VOICE, TTS_RATE, TTS_MAX_RATE, 
-    TEMP_DIR, MELO_SPEAKER, PROJECT_ROOT
+    TEMP_DIR, PROJECT_ROOT
 )
 from utils.timing import calculate_tts_rate, get_media_duration
 
 logger = logging.getLogger(__name__)
 
-# Singleton MeloTTS instance
-_melo_model = None
+# Singleton VieNeu-TTS instance
+_vieneu_model = None
 
-def get_melo_model():
-    """Khởi tạo và tái sử dụng singleton MeloTTS Vietnamese model."""
-    global _melo_model
-    if _melo_model is None:
-        melo_dir = PROJECT_ROOT / "melo_vietnamese"
-        if not melo_dir.exists():
-            raise RuntimeError(f"Thư mục MeloTTS không tìm thấy tại {melo_dir}")
-            
-        melo_path_str = str(melo_dir)
-        if melo_path_str not in sys.path:
-            sys.path.insert(0, melo_path_str)
-            
-        from melo.api import TTS as MeloTTS
-        
-        config_path = str(melo_dir / "checkpoints" / "pretrain" / "config.json")
-        ckpt_path = str(melo_dir / "checkpoints" / "pretrain" / "G_463000.pth")
-        
-        logger.info("Đang khởi động MeloTTS Vietnamese AI Model...")
-        _melo_model = MeloTTS(
-            language="VI",
-            device="cpu",
-            use_hf=False,
-            config_path=config_path,
-            ckpt_path=ckpt_path
-        )
-    return _melo_model
+def get_vieneu_model(mode: str = "v3nano"):
+    """Khởi tạo và tái sử dụng singleton VieNeu-TTS Vietnamese AI model (ONNX Runtime CPU)."""
+    global _vieneu_model
+    if _vieneu_model is None:
+        logger.info("Đang khởi động VieNeu-TTS Vietnamese AI Model (ONNX CPU)...")
+        from vieneu import Vieneu
+        _vieneu_model = Vieneu(mode=mode)
+    return _vieneu_model
+
+# Mapping giọng đọc VieNeu theo vai
+VIENEU_ROLE_VOICE_MAP = {
+    "host": "Minh Quân",
+    "guest_female": "Trúc Ly",
+    "guest_male": "Đức Trí",
+    "child": "Mỹ Duyên"
+}
 
 @dataclass
 class TTSResult:
@@ -53,8 +43,8 @@ class TTSResult:
     tts_duration: float
     rate_used: str
 
-def generate_tts_melo(segments: list, output_dir: Path = None) -> list[TTSResult]:
-    """Tạo âm thanh tiếng Việt chất lượng cao bằng mô hình AI MeloTTS Vietnamese."""
+def generate_tts_vieneu(segments: list, voice: str = "Minh Quân", output_dir: Path = None) -> list[TTSResult]:
+    """Tạo âm thanh tiếng Việt chất lượng cao bằng mô hình AI VieNeu-TTS v3 (Local ONNX CPU)."""
     if output_dir is None:
         output_dir = TEMP_DIR / 'tts'
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -65,35 +55,29 @@ def generate_tts_melo(segments: list, output_dir: Path = None) -> list[TTSResult
         except Exception:
             pass
 
-    model = get_melo_model()
-    spk2id = model.hps.data.spk2id
-    if hasattr(spk2id, MELO_SPEAKER):
-        speaker_id = getattr(spk2id, MELO_SPEAKER)
-    elif hasattr(spk2id, 'items'):
-        speaker_id = getattr(spk2id, list(spk2id.__dict__.keys())[0], 0)
-    elif isinstance(spk2id, dict):
-        speaker_id = spk2id.get(MELO_SPEAKER, list(spk2id.values())[0] if spk2id else 0)
-    else:
-        speaker_id = 0
-    
+    model = get_vieneu_model()
     results = []
-    logger.info(f"Đang tạo giọng đọc MeloTTS Vietnamese cho {len(segments)} đoạn...")
+    logger.info(f"Đang tạo giọng đọc VieNeu-TTS cho {len(segments)} đoạn...")
     
     for segment in segments:
         text = segment.translated_text.strip()
         if not text:
             text = "..."
             
+        role = getattr(segment, "role", "host")
+        seg_voice = VIENEU_ROLE_VOICE_MAP.get(role, voice or "Minh Quân")
+            
         target_duration = segment.end - segment.start
         output_file = output_dir / f"seg_{segment.id:04d}.wav"
         
-        # Pass 1: Tạo ở tốc độ chuẩn
         try:
-            model.tts_to_file(text, speaker_id, output_path=str(output_file), speed=1.0, quiet=True)
+            audio = model.infer(text=text, voice=seg_voice)
+            model.save(audio, str(output_file))
         except Exception as e:
-            logger.warning(f"MeloTTS lỗi đoạn {segment.id}: {e}. Thử fallback câu đơn...")
+            logger.warning(f"VieNeu-TTS lỗi đoạn {segment.id}: {e}. Fallback câu đơn...")
             try:
-                model.tts_to_file(text.replace("_", " "), speaker_id, output_path=str(output_file), speed=1.0, quiet=True)
+                audio = model.infer(text=text.replace("_", " "), voice=seg_voice)
+                model.save(audio, str(output_file))
             except Exception:
                 pass
                 
@@ -101,16 +85,6 @@ def generate_tts_melo(segments: list, output_dir: Path = None) -> list[TTSResult
         tts_duration = actual
         speed_used = "1.0x"
         
-        # Tự động điều chỉnh tốc độ khớp với timeline video nếu câu quá dài
-        if actual > target_duration * 1.1 and target_duration > 0.3:
-            needed_speed = min(1.8, max(0.8, round(actual / target_duration, 2)))
-            try:
-                model.tts_to_file(text, speaker_id, output_path=str(output_file), speed=needed_speed, quiet=True)
-                tts_duration = get_media_duration(output_file)
-                speed_used = f"{needed_speed}x"
-            except Exception:
-                pass
-                
         results.append(TTSResult(
             segment_id=segment.id,
             audio_path=output_file,
@@ -293,8 +267,8 @@ async def generate_tts_edge(segments: list, voice: str = None, output_dir: Path 
     return sorted(results, key=lambda r: r.segment_id)
 
 def generate_tts_sync(segments: list, engine: str = TTS_ENGINE, voice: str = None, output_dir: Path = None) -> list[TTSResult]:
-    """Hàm điều phối TTS chính (hỗ trợ cả MeloTTS Vietnamese và Edge-TTS)."""
-    if engine == "melo":
-        return generate_tts_melo(segments, output_dir)
+    """Hàm điều phối TTS chính (hỗ trợ cả VieNeu-TTS Vietnamese và Edge-TTS)."""
+    if engine in ("vieneu", "v3nano", "v3turbo", "melo"):
+        return generate_tts_vieneu(segments, voice=voice, output_dir=output_dir)
     else:
         return asyncio.run(generate_tts_edge(segments, voice, output_dir))

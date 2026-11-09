@@ -1,6 +1,6 @@
 """
 Model Cache Singleton (RAM Optimized for 24GB DDR5).
-Preloads Whisper and OCR once in memory, shared across all jobs.
+Preloads Whisper, SenseVoice-Small, and OCR in memory, shared across all jobs.
 """
 import logging
 
@@ -13,6 +13,7 @@ class ModelCache:
         self._whisper_model = None
         self._ocr_engine = None
         self._whisper_size = "medium"
+        self._sensevoice_model = None
     
     def get_whisper(self, model_size: str = "medium"):
         if self._whisper_model is None or self._whisper_size != model_size:
@@ -27,6 +28,19 @@ class ModelCache:
                 num_workers=2
             )
         return self._whisper_model
+
+    def get_sensevoice(self):
+        """SenseVoice-Small AI (Alibaba FunAudioLLM) - Cực nhanh, nhận diện cảm xúc & tiếng Trung."""
+        if self._sensevoice_model is None:
+            from funasr import AutoModel
+            logger.info("[ModelCache] Nạp SenseVoice-Small AI (HuggingFace, CPU) vào RAM...")
+            self._sensevoice_model = AutoModel(
+                model='FunAudioLLM/SenseVoiceSmall',
+                hub='hf',
+                device='cpu',
+                disable_update=True
+            )
+        return self._sensevoice_model
     
     @property
     def ocr(self):

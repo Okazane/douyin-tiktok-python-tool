@@ -58,13 +58,13 @@ DEFAULT_BGM_PATH = BGM_DIR / "default_bgm.mp3"
 DEFAULT_BGM_URL = "https://www.youtube.com/watch?v=yk919HORd5Y"
 
 # === TTS (Giọng đọc chuẩn TikTok) ===
-TTS_ENGINE = "edge"                    # edge (Edge-TTS Neural) | melo (MeloTTS)
+TTS_ENGINE = "edge"                    # edge (Edge-TTS Neural) | vieneu (VieNeu-TTS AI 48kHz)
 TTS_VOICE_FEMALE = "vi-VN-HoaiMyNeural"  # Giọng Nữ TikTok quốc dân (Hoài My)
 TTS_VOICE_MALE = "vi-VN-NamMinhNeural"   # Giọng Nam truyền cảm (Nam Minh)
 TTS_VOICE = TTS_VOICE_MALE             # Mặc định: Nam Minh
 TTS_RATE = "+15%"                      # Default speed (~1.15x chuẩn vlog ẩm thực)
 TTS_MAX_RATE = "+80%"                  # Max speed when compressing
-MELO_SPEAKER = "VI-default"            # MeloTTS speaker (dự phòng)
+VIENEU_VOICE = "Minh Quân"             # VieNeu-TTS default voice
 
 
 # === Whisper ===

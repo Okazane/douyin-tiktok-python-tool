@@ -54,8 +54,8 @@ def resolve_voice(voice_input: str) -> str:
 @click.argument('input_source')
 @click.option('--mode', '-m', type=click.Choice(['tts_with_bgm', 'subtitle_only']),
               default='tts_with_bgm', help='Chế độ: lồng tiếng TTS hoặc chỉ phụ đề')
-@click.option('--tts-engine', '-te', type=click.Choice(['edge', 'melo']),
-              default=TTS_ENGINE, help='Công cụ TTS: edge (chuẩn Hoài My/Nam Minh) hoặc melo (MeloTTS)')
+@click.option('--tts-engine', '-te', type=click.Choice(['edge', 'vieneu', 'melo']),
+              default=TTS_ENGINE, help='Công cụ TTS: edge (chuẩn Hoài My/Nam Minh) hoặc vieneu (VieNeu-TTS AI 48kHz)')
 @click.option('--cover-position', '-cp', type=click.Choice(['bottom', 'top', 'both']),
               default=COVER_POSITION, help='Vị trí che phụ đề gốc')
 @click.option('--cover-percent', '-c', type=int, default=COVER_PERCENT,
@@ -125,7 +125,7 @@ def main(input_source, mode, tts_engine, cover_position, cover_percent, cover_y_
             table.add_row("📁 Video hoàn chỉnh", str(result))
             if standalone_audio:
                 table.add_row("🎵 Audio lồng tiếng riêng", str(standalone_audio))
-            table.add_row("🗣️ Công nghệ TTS", "MeloTTS Vietnamese AI (Local)" if tts_engine == "melo" else f"Edge-TTS ({voice})")
+            table.add_row("🗣️ Công nghệ TTS", "VieNeu-TTS AI 48kHz (Local)" if tts_engine in ("vieneu", "melo") else f"Edge-TTS ({voice})")
             table.add_row("🌐 Bộ dịch thuật", "Google Gemini AI (Ngữ cảnh ẩm thực)")
             table.add_row("📐 Kích thước video", "1080 × 1920")
             table.add_row("⏱️ Thời gian xử lý", f"{elapsed:.1f}s")
@@ -273,7 +273,7 @@ def run_pipeline(config: PipelineConfig, export_srt: bool = False, export_audio:
     # Step 4: Closed-Loop Adaptive TTS
     tts_results = None
     if config.mode == "tts_with_bgm":
-        engine_label = "MeloTTS Vietnamese AI" if config.tts_engine == "melo" else f"Edge-TTS ({config.voice})"
+        engine_label = "VieNeu-TTS AI 48kHz (Local)" if config.tts_engine in ("vieneu", "melo") else f"Edge-TTS ({config.voice})"
         console.print(f"\n[bold]🗣️ Bước 4/7: Tạo giọng đọc ({engine_label}) kèm Thích ứng thời lượng...[/]")
         tts_dir = TEMP_DIR / f"tts_{video_path.stem}"
         tts_results = generate_tts_sync(translated, engine=config.tts_engine, voice=config.voice, output_dir=tts_dir)

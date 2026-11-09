@@ -735,7 +735,7 @@ def translate_single(text: str) -> str:
     gemini_keys = get_gemini_keys()
     if gemini_keys:
         seg = [Segment(id=0, start=0.0, end=1.0, text=text, confidence=1.0)]
-        res = _translate_with_gemini(seg, gemini_key)
+        res = _translate_with_gemini(seg, gemini_keys)
         if res:
             return res[0].translated_text
 
